@@ -1,0 +1,100 @@
+import json
+import boto3
+import re
+import os
+import requests
+import base64
+import io
+import gzip
+import time
+
+dynamodb = boto3.resource('dynamodb')
+
+
+def lambda_handler(event, context):
+    # 设置game_id和time_id
+    game_id = 'a0ab500d71a648edbe61e14857b11435'
+    team_id = 'ad5edbfe1ec041efae5ff6f8df8e0c36'
+
+    # 建立dynamodb表格
+    try:
+        movie_table = create_movie_table(DynamodbName="Refund")
+        print("Table status:", movie_table.table_status)
+        time.sleep(5)
+    except:
+        pass
+
+    # 从日志中获取refund的那一行数据
+    print("event:", event)
+    data = base64.b64decode(event['awslogs']['data'])
+    buf = io.BytesIO(data)
+    gf = gzip.GzipFile(fileobj=buf)
+    content = gf.read().decode('UTF-8')
+    print("content:", content)
+
+    # 多个refund的message是一个列表
+    request_json = json.loads(content)
+    request_list = request_json['logEvents']
+
+    for i in request_list:
+        # 获取message中的refundid
+        request_messages = i['message']
+        request_sp = request_messages.split(" ")
+        refund_id = request_sp[7]
+        print(refund_id)
+
+        # 提交refundid
+        data = {
+            'game': game_id,
+            'team': team_id,
+            'order': refund_id
+        }
+        url = 'https://stats.aws.dev-null.link/proc/refund'
+        response = requests.post(url, data=json.dumps(data))
+        print(response.content)
+
+        # 向dynamodb表插入数据
+        insert_data(DynamodbName="Refund", RefundId=refund_id,game_id=game_id,team_id=team_id,response=response.content )
+
+    # 返回refund_id和提交的数据
+    return 0
+
+
+def create_movie_table(DynamodbName):
+    table = dynamodb.create_table(
+        TableName=DynamodbName,
+        KeySchema=[
+            {
+                'AttributeName': 'Refund',
+                'KeyType': 'HASH'  # Partition key
+            }
+        ],
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'Refund',
+                'AttributeType': 'S'
+            }
+
+        ],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 10,
+            'WriteCapacityUnits': 10
+        }
+    )
+    return table
+
+
+def insert_data(DynamodbName, RefundId,game_id,team_id,response):
+    table = dynamodb.Table(DynamodbName)
+    times = time.strftime('%Y-%m-%d-%H-%M', time.localtime())
+
+    data = {
+        'Refund': str(RefundId),
+        'times': str(times),
+        "game_id":str(game_id),
+        "team_id":str(team_id),
+        "response":str(response)
+
+    }
+    response = table.put_item(Item=data)
+    return response
