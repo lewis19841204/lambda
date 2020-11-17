@@ -1,0 +1,48 @@
+import json
+import boto3
+import re
+import os
+import requests
+import base64
+import io
+import gzip
+
+def lambda_handler(event, context):
+    user_id = 'a0ab500d71a648edbe61e14857b11435'
+    game_id = 'ad5edbfe1ec041efae5ff6f8df8e0c36'
+    
+    # 从日志中获取refund的那一行数据
+    data = base64.b64decode(event['awslogs']['data'])
+    buf = io.BytesIO(data)
+    gf = gzip.GzipFile(fileobj=buf)
+    content = gf.read().decode('UTF-8')
+    print("content:",content)
+
+    content_json = json.loads(content)
+    request_list = content_json['logEvents']
+    print("request_list:",request_list)
+    
+    for i in request_list:
+        request_messages = i['message']
+        print("message:",request_messages)
+        request_sp = request_messages.split(" ")
+        refund_id = request_sp[-2]
+        print("refund_id:",refund_id)
+        
+        #data = '\'{\"game\":\"\'\"%s\"\'\", \"team\":\"\'\"%s\"\'\", \"order\":\"\'\"%s\"\'\"}\'' % (game_id, team_id, refund_id)
+        data = {
+            'user_id':user_id,
+            'game_id':game_id,
+            'order':refund_id
+        }
+        url = 'https://stats.aws.dev-null.link/proc/refund'
+        '''
+        headers = {
+            'Accept': 'application/json',
+        }
+        '''
+        response = requests.post(url, data=json.dumps(data))
+        print(response.content)
+
+    # 返回refund_id和提交的数据
+    return 0
