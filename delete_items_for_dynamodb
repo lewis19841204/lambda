@@ -1,0 +1,24 @@
+import json
+import boto3
+import time
+
+client = boto3.client('dynamodb')
+
+def lambda_handler(event, context):
+    delete_items = client.delete_item(
+        TableName='lewis',
+        Key={
+            'refundid':{
+                'S': 'abcdefghijklmn'
+            },
+            'teamid':{
+                'S': '124324534534'
+            }
+        }
+    )
+    time.sleep(5)
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('delete_items success!')
+    }
