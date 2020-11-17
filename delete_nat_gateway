@@ -1,0 +1,64 @@
+import json
+import boto3
+import botocore
+import time
+
+client = boto3.client("ec2")
+
+
+def lambda_handler(event, context):
+    describe_vpc = client.describe_vpcs(
+        Filters=[
+            {
+                'Name': 'tag:Name',
+                'Values': [
+                    'lewis_vpc',
+                ]
+            }
+        ]
+    )
+    print(describe_vpc['Vpcs'])
+
+    describe_nat_gateway = client.describe_nat_gateways(
+        Filters=[
+            {
+                'Name': 'vpc-id',
+                'Values': [
+                describe_vpc['Vpcs'][0]['VpcId'],
+                ]
+            }
+        ]
+    )
+    for i in describe_nat_gateway['NatGateways']:
+        State = i['State']
+        NatGatewayId = i['NatGatewayId']
+        if State == 'available':
+            delete_nat_gateway_1 = client.delete_nat_gateway(
+                NatGatewayId = i['NatGatewayId']
+            )
+        else:
+            pass
+    
+    for j in describe_nat_gateway['NatGateways']:
+        State = j['State']
+		NatGatewayId = j['NatGatewayId']
+		AllocationId = j['NatGatewayAddresses'][0]['AllocationId']
+		if State == 'deleting':    
+			print('the'+NatGatewayId+'is still deleting,it will be deleted soon!')
+			describe_nat_gateway = client.describe_nat_gateways(
+				Filters=[
+					{
+						'Name': 'vpc-id',
+						'Values': [
+							describe_vpc['Vpcs'][0]['VpcId']
+						]
+					}
+				]
+			)
+			continue
+		elif State == 'deleted':
+			print('the' + NatGatewayId + 'is deleted!')
+			break
+		elif State == 'failed':
+			print('the' + NatGatewayId + 'is fault!')
+			break
