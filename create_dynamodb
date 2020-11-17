@@ -1,0 +1,61 @@
+import json
+import boto3
+import time
+
+client = boto3.client('dynamodb')
+
+
+def lambda_handler(event, context):
+    create_dynamodb_table = client.create_table(
+        TableName='lewis',
+        KeySchema=[
+            {
+                'AttributeName': 'refundid',
+                'KeyType': 'HASH'
+            },
+            {
+                'AttributeName': 'teamid',
+                'KeyType': 'RANGE'
+            },
+            
+        ],
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'refundid',
+                'AttributeType': 'S'
+            },
+            {
+                'AttributeName': 'teamid',
+                'AttributeType': 'S'
+            },
+        ],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 10,
+            'WriteCapacityUnits': 10
+        },
+        
+        StreamSpecification={
+            'StreamEnabled': True,
+            'StreamViewType': 'NEW_IMAGE'
+        }
+    )   
+    
+    time.sleep(15)
+    '''
+    input_item_table = client.put_item(
+        TableName='lewis',
+        Item={
+            'refundid': "dsadasdfafdsf",
+            'teamid':"111-222-333"
+        }
+    )
+    time.sleep(10)
+    '''
+
+    describe_table = client.describe_table(TableName='refund')
+    print(describe_table)
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps('success!')
+    }
