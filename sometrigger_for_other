@@ -1,0 +1,53 @@
+import json
+import boto3
+import re
+import os
+# import requests
+import base64
+import io
+import gzip
+import time
+
+s3 = boto3.client('s3')
+sns = boto3.client('sns')
+
+def lambda_handler(event, context):
+    # TODO implement
+    print(event)
+    name_old=event['Records'][0]['s3']['object']['key']
+    print(name_old)
+    get_object_1 = s3.get_object(
+        Bucket='lewis123456789',
+        Key=str(name_old)
+    )
+    get_object_2 = get_object_1['Body']
+    s = io.StringIO()
+    s.write(str(get_object_2))
+    t1 = gzip.open(s)
+    t2 = open(s)
+    t3 = t1.read()
+    t2.write(t3.decode('UTF-8'))
+    print(t3)
+    # content = gzip.GzipFile(fileobj=s)
+    # print(str(content))
+    
+    
+    # t1,t2 = name_old.split('.',1)
+    # n1 = str(t1)+'+a'
+    # n2 = '.'+str(t2)
+    # name_new = str(n1)+str(n2)
+    # print(name_new)
+    # s3_copy_object = s3.copy_object(
+    #     Bucket='lewis123452',
+    #     CopySource={'Bucket': 'lewis123451', 'Key': str(name_old)},
+    #     Key=str(name_new)
+    # )
+    
+    # publish_message = sns.publish(
+    #     TopicArn='arn:aws:sns:us-west-2:272290015767:20201106',
+    #     Message='it is success!'
+    # )
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
