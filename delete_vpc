@@ -1,0 +1,201 @@
+import json
+import boto3
+import botocore
+import time
+
+client = boto3.client("ec2")
+resource = boto3.resource("ec2")
+waiter = client.get_waiter('conversion_task_cancelled')
+
+
+def lambda_handler(event, context):
+    describe_vpc = client.describe_vpcs(
+        Filters=[
+            {
+                'Name': 'tag:Name',
+                'Values': [
+                    'lewis_vpc',
+                ]
+            }
+        ]
+    )
+    print(describe_vpc['Vpcs'])
+
+    describe_nat_gateway = client.describe_nat_gateways(
+        Filters=[
+            {
+                'Name': 'vpc-id',
+                'Values': [
+                describe_vpc['Vpcs'][0]['VpcId'],
+                ]
+            }
+        ]
+    )
+    for i in describe_nat_gateway['NatGateways']:
+        State = i['State']
+        NatGatewayId = i['NatGatewayId']
+        if State == 'available':
+            delete_nat_gateway_1 = client.delete_nat_gateway(
+                NatGatewayId = i['NatGatewayId']
+            )
+        else:
+            pass
+    
+    for j in describe_nat_gateway['NatGateways']:
+        while True:
+            State = j['State']
+            NatGatewayId = j['NatGatewayId']
+            AllocationId = j['NatGatewayAddresses'][0]['AllocationId']
+            if State == 'deleting':
+                print('the'+NatGatewayId+'is still deleting,it will be deleted soon!')
+                describe_nat_gateway = client.describe_nat_gateways(
+                    Filters=[
+                        {
+                            'Name': 'vpc-id',
+                            'Values': [
+                                describe_vpc['Vpcs'][0]['VpcId']
+                            ]
+                        }
+                    ]
+                )
+                continue
+            elif State == 'deleted':
+                print('the' + NatGatewayId + 'is deleted!')
+                release_address = client.release_address(
+                    AllocationId = j['NatGatewayAddresses'][0]['AllocationId']
+                )
+                break
+            else:
+                print('the' + NatGatewayId + 'is fault!')
+                break
+    
+    describe_internet_gateway = client.describe_internet_gateways(
+        Filters=[
+            {
+                'Name': 'attachment.vpc-id',
+                'Values': [
+                    describe_vpc['Vpcs'][0]['VpcId']
+                ]
+            }
+        ]
+    )
+    print(describe_internet_gateway['InternetGateways'][0]['InternetGatewayId'])
+    
+    temp = describe_internet_gateway['InternetGateways'][0]['InternetGatewayId']
+    detach_internet_gateway = client.detach_internet_gateway(
+        InternetGatewayId=temp,
+        VpcId=describe_vpc['Vpcs'][0]['VpcId']
+    )
+    
+    
+    delete_internet_gateway = client.delete_internet_gateway(
+        InternetGatewayId=describe_internet_gateway['InternetGateways'][0]['InternetGatewayId']
+    )
+    
+    describe_subnet = client.describe_subnets(
+        Filters=[
+            {
+                'Name': 'vpc-id',
+                'Values': [
+                    describe_vpc['Vpcs'][0]['VpcId']
+                ]
+            }
+        ]
+    )
+    print(describe_subnet['Subnets'][0]['SubnetId'])
+    
+    response = client.delete_subnet(
+        SubnetId=describe_subnet['Subnets'][0]['SubnetId']
+    )
+    time.sleep(5)
+    
+    response = client.delete_subnet(
+        SubnetId=describe_subnet['Subnets'][1]['SubnetId']
+    )
+    time.sleep(5)
+    
+    response = client.delete_subnet(
+        SubnetId=describe_subnet['Subnets'][2]['SubnetId']
+    )
+    time.sleep(5)
+    
+    response = client.delete_subnet(
+        SubnetId=describe_subnet['Subnets'][3]['SubnetId']
+    )
+    time.sleep(5)
+    
+    route_table_main = client.describe_route_tables(
+        Filters=[
+            {
+                'Name': 'vpc-id',
+                'Values': [
+                    describe_vpc['Vpcs'][0]['VpcId']
+                ]
+            },
+            {   
+                'Name': 'association.main',
+                'Values':[
+                    'true'
+                ]
+            }
+        ]
+    )
+    print(route_table_main)
+    route_table_main_id = route_table_main['RouteTables'][0]['RouteTableId']
+    
+    describe_route_table = client.describe_route_tables(
+        Filters=[
+            {
+                'Name': 'vpc-id',
+                'Values': [
+                    describe_vpc['Vpcs'][0]['VpcId']
+                ]
+            }
+        ]
+    )
+    describe_route_table_id = describe_route_table['RouteTables'][0]['RouteTableId']
+    
+    for i in describe_route_table['RouteTables']:
+        a = describe_route_table_id
+        if a == route_table_main_id:
+            pass
+        else:
+            response = client.delete_route_table(
+                RouteTableId=describe_route_table['RouteTables'][0]['RouteTableId']
+            )
+        time.sleep(5)
+            
+    describe_security_group = client.describe_security_groups(
+        Filters=[
+            {
+                'Name': 'vpc-id',
+                'Values': [
+                    describe_vpc['Vpcs'][0]['VpcId']
+                ]
+            }
+        ]
+    )
+
+    
+    delete_security_group = client.delete_security_group(
+        GroupId=describe_security_group['SecurityGroups'][0]['GroupId']
+    )
+    
+    delete_security_group = client.delete_security_group(
+        GroupId=describe_security_group['SecurityGroups'][1]['GroupId']
+    )
+    
+    delete_security_group = client.delete_security_group(
+        GroupId=describe_security_group['SecurityGroups'][2]['GroupId']
+    )
+    
+    response = client.delete_vpc(
+        VpcId=['Vpcs'][0]['VpcId']
+    )
+    time.sleep(10)
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('everything is ok!')
+    }
+    
