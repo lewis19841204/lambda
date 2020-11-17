@@ -1,0 +1,78 @@
+import json
+import boto3
+import botocore
+import time
+
+def lambda_handler(event, context):
+    #trigger lambda from api-gw
+    name = event['name']
+    print(name)
+    ec2 = boto3.resource('ec2')
+    # create VPC
+    vpc = ec2.create_vpc(CidrBlock='10.0.0.0/16')
+    vpc.create_tags(Tags=[{"Key": "Name", "Value": name}])
+    vpc.wait_until_available()
+    ec2Client = boto3.client('ec2')
+    ec2Client.modify_vpc_attribute( VpcId = vpc.id , EnableDnsSupport = { 'Value': True } )
+    ec2Client.modify_vpc_attribute( VpcId = vpc.id , EnableDnsHostnames = { 'Value': True } )
+            
+    # create an internet gateway and attach it to VPC
+    internetgateway = ec2.create_internet_gateway()
+    vpc.attach_internet_gateway(InternetGatewayId=internetgateway.id)
+        
+    pub_subnet1 = ec2.create_subnet(CidrBlock='10.0.10.0/24', VpcId=vpc.id)
+    pub_subnet1.create_tags(Tags=[{"Key": "Name", "Value": "pub-a"}])
+    pub_subnet2 = ec2.create_subnet(CidrBlock='10.0.20.0/24', VpcId=vpc.id)
+    pub_subnet2.create_tags(Tags=[{"Key": "Name", "Value": "pub-b"}])
+    pri_subnet1 = ec2.create_subnet(CidrBlock='10.0.30.0/24', VpcId=vpc.id)
+    pri_subnet1.create_tags(Tags=[{"Key": "Name", "Value": "pri-a"}])
+    pri_subnet2 = ec2.create_subnet(CidrBlock='10.0.40.0/24', VpcId=vpc.id)
+    pri_subnet2.create_tags(Tags=[{"Key": "Name", "Value": "pri-b"}])
+    print("subnet ok")
+        
+    routetable = vpc.create_route_table()
+    routetable.create_tags(Tags=[{"Key": "Name", "Value": "pub"}])
+    route = routetable.create_route(DestinationCidrBlock='0.0.0.0/0', GatewayId=internetgateway.id)
+    routetable.associate_with_subnet(SubnetId=pub_subnet1.id)
+    routetable.associate_with_subnet(SubnetId=pub_subnet2.id)
+        
+    pri_routea = vpc.create_route_table()
+    pri_routea.create_tags(Tags=[{"Key": "Name", "Value": "pri-a"}])
+    pri_routea.associate_with_subnet(SubnetId=pri_subnet1.id)
+    pri_routeb = vpc.create_route_table()
+    pri_routeb.create_tags(Tags=[{"Key": "Name", "Value": "pri-b"}])
+    pri_routeb.associate_with_subnet(SubnetId=pri_subnet2.id)
+    print("route table ok")
+    
+    securitygroup = ec2.create_security_group(GroupName='SSH-ONLY', Description='only allow SSH traffic', VpcId=vpc.id)
+    securitygroup.authorize_ingress(CidrIp='0.0.0.0/0', IpProtocol='tcp', FromPort=22, ToPort=22)
+    print("sg ok")
+        
+    nata_eip = ec2Client.allocate_address(Domain='vpc')
+    natb_eip = ec2Client.allocate_address(Domain='vpc')
+    print("eip ok")
+    allocation_id = nata_eip['AllocationId']
+    nata_gw = ec2Client.create_nat_gateway(SubnetId=pub_subnet1.id,AllocationId=allocation_id)
+    nat_gw_id = nata_gw['NatGateway']['NatGatewayId']
+    print("nat_A ok")
+    associate_id = natb_eip['AllocationId']
+    natb_gw = ec2Client.create_nat_gateway(SubnetId=pub_subnet2.id,AllocationId=associate_id)
+    nat_gwid = natb_gw['NatGateway']['NatGatewayId']
+    print("nat_b ok")
+    nat_waiter=ec2Client.get_waiter('nat_gateway_available')
+    nat_waiter.wait(NatGatewayIds=[nat_gw_id, nat_gwid])
+    print("wait......")
+    try:
+        nat_waiter.wait(NatGatewayIds=[nat_gw_id, nat_gwid],WaiterConfig={
+            'Delay': 6000,
+            'MaxAttempts': 6000
+        })
+        routea = pri_routea.create_route(DestinationCidrBlock='0.0.0.0/0', NatGatewayId=nat_gw_id)
+        routeb = pri_routeb.create_route(DestinationCidrBlock='0.0.0.0/0', NatGatewayId=nat_gwid)
+        print("ok")
+    except botocore.exceptions.WaiterError as e:
+            print(e)
+
+    return {
+        'statusCode': 200
+    }
