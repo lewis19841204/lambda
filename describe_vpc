@@ -1,0 +1,168 @@
+import json
+import boto3
+import botocore
+import time
+
+client = boto3.client("ec2")
+def lambda_handler(event, context):
+    global a
+    a = ''
+    
+    Values = 'lewis_vpc'
+    print("vpc name is : ", Values)
+    
+    '''
+    value = event['queryStringParameters']['name']
+    print("vpc name is : ", value)
+    '''
+    try:
+        VpcId = describe_vpc(name)
+        SubnetId = describe_internetgateway(VpcId)
+        InternetGatewayId = describe_subnet(VpcId)
+        RouteTableId = describe_routetables(VpcId)
+        NatGatewayAll = describe_netgateway(VpcId)
+        security_group_ID = describe_security_group(VpcId)
+        
+        if VpcId:
+            a += 'VPCID:'+VpcId
+        
+        if SubnetId:
+            a += 'SubnetId:'+SubnetId
+            
+        if InternetGatewayId:
+            a += 'InternetGatewayId:'+InternetGatewayId
+            
+        if RouteTableId:
+            a += 'RouteTableId:'+RouteTableId
+            
+        if NatGatewayAll:
+            a += 'NatGatewayAll:'+NatGatewayAll
+        
+        if security_group_ID:
+            a += 'security_group_ID:'+security_group_ID
+        return{
+            'statusCode': 200,
+            'body': json.dumps(a)
+        }
+    except:
+        pass
+        return{
+            'statusCode': 200,
+            'body': json.dumps('there is no vpc!')
+        }
+    
+    
+######################''the below functions are some indicate describe_functions#######################    
+
+def describe_vpc(name):
+    response = client.describe_vpcs(
+        Filters=[
+            {
+                'Name': 'tag:Name',
+                'Values': [
+                    name,
+                ]
+            },
+        ]
+    )
+    VpcId = response['Vpcs'][0]['VpcId']
+    print("describe_vpc: %s" % (VpcId))
+    return VpcId
+    
+
+def describe_netgateway(VpcId):
+    NatGatewayAll = ''
+    try:
+        response = client.describe_nat_gateways(
+            Filters=[
+                {
+                    'Name': 'vpc-id',
+                    'Values': [
+                        VpcId,
+                    ]
+                }
+            ]
+        )
+        for i in response['NatGateways']:
+            NatGatewayId = i['NatGatewayId']
+            NatGatewayState = i['State']
+            NatGatewayAll += str(NatGatewayId)+str(NatGatewayState)
+            print("describe_netgateway_NatGatewayId: %s " % (NatGatewayId))
+            print("describe_netgateway_NatGatewayState: %s " % (NatGatewayState))
+    except:
+        NatGatewayId = ''
+        NatGatewayState = ''
+        print("describe_netgateway is not! ")
+    return NatGatewayAll
+    
+    
+def describe_internetgateway(VpcId):
+    response = client.describe_internet_gateways(
+        Filters=[
+            {
+                'Name': 'attachment.vpc-id',
+                'Values': [
+                    VpcId,
+                ]
+            },
+        ]
+    )
+    InternetGatewayId = response['InternetGateways'][0]['InternetGatewayId']
+    print("describe_internetgateway: %s " % (InternetGatewayId))
+    return InternetGatewayId
+    
+    
+    
+def describe_subnet(VpcId):
+    SubnetId = ''
+    response = client.describe_subnets(
+        Filters=[
+            {
+                'Name': 'vpc-id',
+                'Values': [
+                    VpcId,
+                ]
+            }
+        ]
+    )
+    for i in response['Subnets']:
+        SubnetId += str(i['SubnetId'])
+        print("describe_subnet: %s" % (i['SubnetId']))
+    return SubnetId
+    
+def describe_routetables(VpcId):
+    RouteTableId = ''
+    response = client.describe_route_tables(
+        Filters=[
+            {
+                'Name': 'vpc-id',
+                'Values': [
+                    VpcId,
+                ]
+            }
+        ]
+    )
+    for i  in response['RouteTables']:
+        RouteTableId += str(i['RouteTableId'])
+        print("describe_routetables: %s " % (i['RouteTableId']))
+    return RouteTableId
+    
+def describe_security_group(VpcId):
+    security_group_ID = ''
+    response = client.describe_security_groups(
+        Filters=[
+            {
+                'Name': 'vpc-id',
+                'Values': [
+                    VpcId,
+                ]
+            }
+        ]
+    )
+    for i in response['SecurityGroups']:
+        security_group_ID += str(i['GroupId'])
+        print("describe_security_group:%"%(i[security_group_ID]))
+    return security_group_ID
+    
+
+    
