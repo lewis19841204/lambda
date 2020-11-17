@@ -1,0 +1,54 @@
+import json
+import boto3
+import time
+client = boto3.client('ec2')
+def lambda_handler(event, context):
+    # TODO implement
+    lewis_prefix_list = client.create_managed_prefix_list(
+        PrefixListName='lewis_prefix_list',
+        Entries=[
+            {
+                'Cidr': '1.1.1.0/24',
+                'Description': 'network_1.0'
+            },
+        ],
+        MaxEntries=11,
+        TagSpecifications=[
+            {
+                'ResourceType': 'prefix-list',
+                'Tags': [
+                    {
+                        'Key': 'Name',
+                        'Value': 'lewis_prefix_list'
+                    },
+                ]
+            },
+        ],
+        AddressFamily='IPV4'
+    )
+    
+    lewis_prefix_list_ID = lewis_prefix_list['PrefixList']['PrefixListId']
+    lewis_prefix_list_Version = lewis_prefix_list['PrefixList']['Version']
+    print(str(lewis_prefix_list_ID))
+    list_prefix_list_template = ['2.2.2.0/24','3.3.3.0/24','4.4.4.0/24','5.5.5.0/24','6.6.6.0/24','7.7.7.0/24','8.8.8.0/24']
+    
+    for i in list_prefix_list_template:
+        print(i)
+        time.sleep(2)
+        modify_managed_prefix_list_entries = client.modify_managed_prefix_list(
+            PrefixListId=str(lewis_prefix_list_ID),
+            CurrentVersion=lewis_prefix_list_Version,
+            PrefixListName='lewis_prefix_list',
+            AddEntries=[
+                {
+                    'Cidr': str(i),
+                    'Description': str(i)
+                },
+            ]
+        )
+        lewis_prefix_list_Version = lewis_prefix_list_Version + 1
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
