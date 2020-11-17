@@ -1,0 +1,77 @@
+import json
+import time
+import boto3
+
+s3 = boto3.resource('s3')
+dynamodb = boto3.resource('dynamodb')
+
+
+def lambda_handler(event, context):
+    # TODO implement
+    print(event)
+
+    # s3.meta.client.download_file('mybucket', 'hello.txt', '/tmp/hello.txt')
+    filename = event['detail']['requestParameters']['key']
+    bucketName = event['detail']['requestParameters']['bucketName']
+    Host = event['detail']['requestParameters']['Host']
+
+    print(filename, bucketName, Host)
+
+    DynamodbName = 'S3Upload'
+    try:
+        create_movie_table(DynamodbName)
+    except:
+        pass
+    insert_data(DynamodbName, filename, bucketName, Host)
+    
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
+
+
+def create_movie_table(DynamodbName):
+    table = dynamodb.create_table(
+        TableName=DynamodbName,
+        KeySchema=[
+            {
+                'AttributeName': 'filename',
+                'KeyType': 'HASH'  # Partition key
+            },
+            {
+                'AttributeName': 'bucketName',
+                'KeyType': 'RANGE'  # Sort key
+            }
+        ],
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'filename',
+                'AttributeType': 'S'
+            },
+            {
+                'AttributeName': 'bucketName',
+                'AttributeType': 'S'
+            }
+
+        ],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 10,
+            'WriteCapacityUnits': 10
+        }
+    )
+    return table
+
+
+def insert_data(DynamodbName, filename, bucketName, Host):
+    table = dynamodb.Table(DynamodbName)
+    times = time.strftime('%Y-%m-%d-%H-%M', time.localtime())
+
+    data = {
+        'filename': str(filename),
+        'bucketName': str(bucketName),
+        'times': str(times),
+        "Host": str(Host)
+    }
+    response = table.put_item(Item=data)
+    return response
